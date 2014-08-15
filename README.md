@@ -3,6 +3,8 @@ twitter2email
 
 Tool to parse twitter user timeline and send tweets as email.
 
+Doesn't require twitter API
+
 Inspired by rss2email (http://www.allthingsrss.com/rss2email/).
 
 Not fully tested and debugged yet, use at your own risks.
@@ -26,6 +28,6 @@ StackCrypto
 
 * User mail configuration in config file
 * HTML emails
-* Email date should match tweet timestamp
+* ~~Email date should match tweet timestamp~~
 * Review Mail headers
 * Handle possible exceptions in html fetch and parsing

@@ -28,7 +28,6 @@ DEFAULT_TO = "user@domain"
 # 0: Convert HTML to plain text.
 HTML_MAIL = 1
 
-# TODO: Not supported yet
 # 1: Generate Date header based on item's date, when possible.
 # 0: Generate Date header based on time sent.
 DATE_HEADER = 1
@@ -209,18 +208,22 @@ SMTP_PASS = 'password'  # for SMTP AUTH, set SMTP password here
 		return None
 
 # Fill the mail
-def createEmail(name, text, timeline, link):
+def createEmail(name, text, date, timeline, link):
     from_addr = DEFAULT_FROM
     name = "Twitter: " + name
     fromhdr = formataddr((name, from_addr,))
     tohdr = DEFAULT_TO
     subjecthdr = text
-    datetime = time.gmtime()
+    datetime = None
+    if DATE_HEADER:
+        datetime = (date or time.gmtime())
+    else:
+        datetime = time.gmtime()
     datehdr = time.strftime("%a, %d %b %Y %H:%M:%S -0000", datetime)
     useragenthdr = "rss2email"
     extraheaders = {'Date': datehdr, 'User-Agent': useragenthdr, 'X-RSS-Feed': timeline , 'X-RSS-URL': link}
     contenttype = 'plain'
-    #print "From: %s \nTo: %s \nSubject: %s \nContent: %s \nContenttype: %s\nLink: %s" % (fromhdr, tohdr, subjecthdr, text, contenttype, link)
+    #print "Date: %s \nFrom: %s \nTo: %s \nSubject: %s \nContent: %s \nContenttype: %s\nLink: %s" % (datehdr, fromhdr, tohdr, subjecthdr, text, contenttype, link)
     #smtpserver = send(fromhdr, tohdr, subjecthdr, text, contenttype, extraheaders, smtpserver)
     smtpserver = send(fromhdr, tohdr, subjecthdr, text, contenttype, extraheaders)
 
@@ -236,6 +239,7 @@ class MyHTMLParser(HTMLParser):
     tweetscreenname = "" # data-screen-name
     tweetname = "" # data-name
     text="" # content of the tweet
+    date=None
 
     def configure(self, following="", last=""):
         self.following = following
@@ -254,6 +258,17 @@ class MyHTMLParser(HTMLParser):
                     self.tweetscreenname = value
                 if attr == 'data-name':
                     self.tweetname=value
+        if tag == "a":
+            timeFlag=False
+            for attr, value in attrs:
+                if attr == 'class' and "ProfileTweet-timestamp" in value.split():
+                    timeFlag=True
+                if attr == 'title' and timeFlag:
+                    # ex: 6:19 PM - 6 Aug 2014
+                    # XXX: locale MUST match the lang for month abr %b
+                    # XXX: fixed by setting Accepted-Language HTTP header to en
+                    self.date=time.strptime(value, "%I:%M %p - %d %b %Y")
+                    timeFlag=False
         if tag == "p":
             for attr,value in attrs:
                 if attr == 'class' and "ProfileTweet-text" in value.split():
@@ -263,7 +278,7 @@ class MyHTMLParser(HTMLParser):
             return
         if tag == "p" and self.flag == True:
                 #print self.tweetid + " == " + self.tweetscreenname + " == " +self.text
-                createEmail(self.tweetname, self.text, TWITTER_TIMELINE_TEMPLATE % self.tweetscreenname, TWITTER_STATUS_TEMPLATE % (self.tweetscreenname, self.tweetid))
+                createEmail(self.tweetname, self.text, self.date, TWITTER_TIMELINE_TEMPLATE % self.tweetscreenname, TWITTER_STATUS_TEMPLATE % (self.tweetscreenname, self.tweetid))
                 if self.First is True:
                     lastSeen[self.following] = self.tweetid
                     self.First = False
@@ -281,7 +296,9 @@ class MyHTMLParser(HTMLParser):
 # fetch new tweets from user tuser since tweet with id last
 def fetchFeed(tuser, last):
     url = TWITTER_TIMELINE_TEMPLATE % (tuser)
-    r = requests.get(url)
+    # XXX: dirty...
+    headers = {'Accept-Language': 'en'}
+    r = requests.get(url,headers=headers)
     content = r.json()['items_html']
     parser = MyHTMLParser()
     parser.configure(tuser, last)
